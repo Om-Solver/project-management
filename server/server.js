@@ -13,7 +13,14 @@ app.use(clerkMiddleware());
 
 app.get('/', (req, res) => res.send('Server is live!'));
 
-app.use("/api/inngest", serve({ client: inngest, functions, signingKey: process.env.INNGEST_SIGNING_KEY }));
+app.use(
+  "/api/inngest",
+  serve({
+    client: inngest,
+    functions,
+    signingKey: process.env.INNGEST_SIGNING_KEY ?? process.env.INNGEST_SIGNIN_KEY,
+  })
+);
 
 const PORT = process.env.PORT || 5000
 
