@@ -31,7 +31,12 @@ export default function CreateTaskDialog({ showCreateTask, setShowCreateTask, pr
         e.preventDefault();
         setIsSubmitting(true)
         try {
-            const { data } = await api.post('/api/tasks', { ...formData, workspaceId: currentWorkspace.id, projectId }, { headders: { Authorization: `Bearer ${await getToken()}` } })
+            const token = await getToken()
+            const { data } = await api.post(
+                '/api/tasks',
+                { ...formData, workspaceId: currentWorkspace.id, projectId },
+                { headers: { Authorization: `Bearer ${token}` } }
+            )
             setFormData({
                 title: "",
                 description: "",
