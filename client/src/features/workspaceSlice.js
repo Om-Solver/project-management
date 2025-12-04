@@ -4,10 +4,11 @@ import api from "../configs/api";
 
 export const fetchWorkspaces = createAsyncThunk('workspace/fetchWorkspaces', async ({ getToken }) => {
     try {
-        const { data } = await api.get('/api/workspaces', { headers: { Authorization: `Bearer ${await getToken()}` } })
-        return data.workspaces || []
+        const token = await getToken()
+        const response = await api.get('/api/workspaces', { headers: { Authorization: `Bearer ${token}` } })
+        return response.data.workspaces || []
     } catch (error) {
-        console.log(error?.response?.data?.message || error.message)
+        console.error("Error fetching workspaces:", error.message);
         return []
     }
 })

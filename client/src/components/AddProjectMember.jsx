@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { Mail, UserPlus } from "lucide-react";
-import { useSelector } from "react-redux";
+import { Mail, UserPlus, X } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
+import api from "../configs/api";
+import toast from "react-hot-toast";
+import { fetchWorkspaces } from "../features/workspaceSlice";
 
 const AddProjectMember = ({ isDialogOpen, setIsDialogOpen }) => {
 
@@ -9,17 +13,54 @@ const AddProjectMember = ({ isDialogOpen, setIsDialogOpen }) => {
 
     const id = searchParams.get('id');
 
+    const { getToken } = useAuth()
+    const dispatch = useDispatch()
+
     const currentWorkspace = useSelector((state) => state.workspace?.currentWorkspace || null);
 
-    const project = currentWorkspace?.projects.find((p) => p.id === id);
-    const projectMembersEmails = project?.members.map((member) => member.user.email);
+    const project = currentWorkspace?.projects?.find((p) => p.id === id);
+    const projectMembersEmails = project?.members?.map((member) => member.user.email) || [];
 
     const [email, setEmail] = useState('');
     const [isAdding, setIsAdding] = useState(false);
+    const [searchInput, setSearchInput] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    const availableMembers = currentWorkspace?.members
+        ?.filter((member) => !projectMembersEmails.includes(member.user.email))
+        ?.filter((member) => member.user.email.toLowerCase().includes(searchInput.toLowerCase()))
+        || [];
+
+    const handleSelectMember = (memberEmail) => {
+        setEmail(memberEmail);
+        setSearchInput(memberEmail);
+        setShowDropdown(false);
+    };
+
+    const handleClearSelection = () => {
+        setEmail('');
+        setSearchInput('');
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+        if (!email) {
+            toast.error("Please select a member");
+            return;
+        }
+        setIsAdding(true)
+        try {
+            await api.post(`/api/projects/${project.id}/addMember`, { email }, { headers: { Authorization: `Bearer ${await getToken()}` } })
+            toast.success("Added to project successfully")
+            setIsDialogOpen(false)
+            setEmail('');
+            setSearchInput('');
+            dispatch(fetchWorkspaces({ getToken }))
+        } catch (error) {
+            toast.error(error.response?.data?.message || error.message)
+        } finally {
+            setIsAdding(false)
+        }
     };
 
     if (!isDialogOpen) return null;
@@ -47,16 +88,51 @@ const AddProjectMember = ({ isDialogOpen, setIsDialogOpen }) => {
                             Email Address
                         </label>
                         <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-400 w-4 h-4" />
-                            {/* List All non project members from current workspace */}
-                            <select value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10 mt-1 w-full rounded border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-200 text-sm placeholder-zinc-400 dark:placeholder-zinc-500 py-2 focus:outline-none focus:border-blue-500" required >
-                                <option value="">Select a member</option>
-                                {currentWorkspace?.members
-                                    .filter((member) => !projectMembersEmails.includes(member.user.email))
-                                    .map((member) => (
-                                        <option key={member.user.id} value={member.user.email}> {member.user.email} </option>
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-400 w-4 h-4 pointer-events-none" />
+                            <input
+                                id="email"
+                                type="text"
+                                placeholder="Search or type member email"
+                                value={searchInput}
+                                onChange={(e) => {
+                                    setSearchInput(e.target.value);
+                                    setShowDropdown(true);
+                                }}
+                                onFocus={() => setShowDropdown(true)}
+                                className="pl-10 pr-8 mt-1 w-full rounded border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-200 text-sm placeholder-zinc-400 dark:placeholder-zinc-500 py-2 focus:outline-none focus:border-blue-500"
+                                disabled={!currentWorkspace || !project}
+                            />
+                            {email && (
+                                <button
+                                    type="button"
+                                    onClick={handleClearSelection}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+
+                            {/* Dropdown */}
+                            {showDropdown && availableMembers.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded shadow-lg z-10 max-h-48 overflow-y-auto">
+                                    {availableMembers.map((member) => (
+                                        <button
+                                            key={member.user.id}
+                                            type="button"
+                                            onClick={() => handleSelectMember(member.user.email)}
+                                            className="w-full text-left px-4 py-2 hover:bg-blue-50 dark:hover:bg-zinc-800 text-zinc-900 dark:text-zinc-200 text-sm border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 transition"
+                                        >
+                                            {member.user.email}
+                                        </button>
                                     ))}
-                            </select>
+                                </div>
+                            )}
+
+                            {showDropdown && searchInput && availableMembers.length === 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded shadow-lg z-10 px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                                    No members found
+                                </div>
+                            )}
                         </div>
                     </div>
 

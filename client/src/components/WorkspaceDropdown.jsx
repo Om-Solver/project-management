@@ -1,11 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ChevronDown, Check, Plus } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { setCurrentWorkspace } from "../features/workspaceSlice";
+import { setCurrentWorkspace, fetchWorkspaces } from "../features/workspaceSlice";
 import { useNavigate } from "react-router-dom";
 import { assets } from "../assets/assets";
 import { useAuth, useClerk, useOrganizationList } from "@clerk/clerk-react";
-import { fetchWorkspaces } from "../features/workspaceSlice";
 
 function WorkspaceDropdown() {
 
@@ -22,12 +21,12 @@ function WorkspaceDropdown() {
     const navigate = useNavigate();
     const { getToken } = useAuth();
 
-    const onSelectWorkspace = (organizationId) => {
-        setActive({ organization: organizationId })
+    const onSelectWorkspace = useCallback((organizationId) => {
+        setActive({ organization: organizationId }).catch(() => {})
         dispatch(setCurrentWorkspace(organizationId))
         setIsOpen(false);
         navigate('/')
-    }
+    }, [setActive, dispatch, navigate])
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -40,11 +39,12 @@ function WorkspaceDropdown() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    // Set active organization when currentWorkspace changes
     useEffect(() => {
-        if (currentWorkspace && isLoaded) {
-            setActive({ organization: currentWorkspace.id })
+        if (currentWorkspace?.id && isLoaded) {
+            setActive({ organization: currentWorkspace.id }).catch(() => {})
         }
-    }, [currentWorkspace, isLoaded])
+    }, [currentWorkspace?.id, isLoaded, setActive])
 
     return (
         <div className="relative m-4" ref={dropdownRef}>
@@ -69,22 +69,26 @@ function WorkspaceDropdown() {
                         <p className="text-xs text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-2 px-2">
                             Workspaces
                         </p>
-                        {userMemberships.data.map(({ organization }) => (
-                            <div key={organization.id} onClick={() => onSelectWorkspace(organization.id)} className="flex items-center gap-3 p-2 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-zinc-800" >
-                                <img src={organization.imageUrl} alt={organization.name} className="w-6 h-6 rounded" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                                        {organization.name}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-zinc-400 truncate">
-                                        {organization.membersCount || 0} members
-                                    </p>
+                        {workspaces && workspaces.length > 0 ? (
+                            workspaces.map((workspace) => (
+                                <div key={workspace.id} onClick={() => onSelectWorkspace(workspace.id)} className="flex items-center gap-3 p-2 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-zinc-800" >
+                                    <img src={workspace.image_url || assets.workspace_img_default} alt={workspace.name} className="w-6 h-6 rounded" onError={(e) => { e.currentTarget.src = assets.workspace_img_default }} />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                                            {workspace.name}
+                                        </p>
+                                        <p className="text-xs text-gray-500 dark:text-zinc-400 truncate">
+                                            {workspace.members?.length || 0} members
+                                        </p>
+                                    </div>
+                                    {currentWorkspace?.id === workspace.id && (
+                                        <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                    )}
                                 </div>
-                                {currentWorkspace?.id === organization.id && (
-                                    <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                                )}
-                            </div>
-                        ))}
+                            ))
+                        ) : (
+                            <p className="text-xs text-gray-500 dark:text-zinc-400 p-2">No workspaces yet</p>
+                        )}
                     </div>
 
                     <hr className="border-gray-200 dark:border-zinc-700" />

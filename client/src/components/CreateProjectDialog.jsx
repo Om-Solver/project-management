@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { XIcon } from "lucide-react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import toast from "react-hot-toast";
+import api, { setAuthToken } from "../configs/api";
+import { useAuth } from "@clerk/clerk-react";
+import { useUser } from "@clerk/clerk-react";
+import { addProject } from "../features/workspaceSlice";
 
 const CreateProjectDialog = ({ isDialogOpen, setIsDialogOpen }) => {
+
+    const { getToken } = useAuth()
+    const { user } = useUser()
+    const dispatch = useDispatch()
 
     const { currentWorkspace } = useSelector((state) => state.workspace);
 
@@ -20,9 +29,50 @@ const CreateProjectDialog = ({ isDialogOpen, setIsDialogOpen }) => {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Reset form when dialog opens
+    useEffect(() => {
+        if (isDialogOpen) {
+            setFormData({
+                name: "",
+                description: "",
+                status: "PLANNING",
+                priority: "MEDIUM",
+                start_date: "",
+                end_date: "",
+                team_members: [],
+                team_lead: "",
+                progress: 0,
+            });
+            console.log("Dialog opened, currentWorkspace members:", currentWorkspace?.members);
+        }
+    }, [isDialogOpen]);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+        try {
+            if (!formData.team_lead) {
+                return toast.error("Please select a team lead")
+            }
+            setIsSubmitting(true)
+
+            console.log("Submitting form data:", { workspaceId: currentWorkspace.id, ...formData });
+
+            const token = await getToken()
+            setAuthToken(token)
+
+            const { data } = await api.post("/api/projects", { workspaceId: currentWorkspace.id, ...formData })
+
+            console.log("Project created successfully:", data);
+            dispatch(addProject(data.project))
+            toast.success("Project created successfully!")
+            setIsDialogOpen(false)
+        } catch (error) {
+            console.error("Error creating project:", error);
+            toast.error(error?.response?.data?.message || error.message)
+        }
+        finally {
+            setIsSubmitting(false)
+        }
     };
 
     const removeTeamMember = (email) => {
@@ -97,34 +147,51 @@ const CreateProjectDialog = ({ isDialogOpen, setIsDialogOpen }) => {
                     <div>
                         <label className="block text-sm mb-1">Project Lead</label>
                         <select value={formData.team_lead} onChange={(e) => setFormData({ ...formData, team_lead: e.target.value, team_members: e.target.value ? [...new Set([...formData.team_members, e.target.value])] : formData.team_members, })} className="w-full px-3 py-2 rounded dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 mt-1 text-zinc-900 dark:text-zinc-200 text-sm" >
-                            <option value="">No lead</option>
-                            {currentWorkspace?.members?.map((member) => (
-                                <option key={member.user.email} value={member.user.email}>
-                                    {member.user.email}
-                                </option>
-                            ))}
+                            <option value="">Select a team lead</option>
+                            {/* Show workspace members if available */}
+                            {currentWorkspace?.members && currentWorkspace.members.length > 0 ? (
+                                currentWorkspace.members.map((member) => (
+                                    <option key={member.user.email} value={member.user.email}>
+                                        {member.user.email}
+                                    </option>
+                                ))
+                            ) : (
+                                /* Fallback: show current user */
+                                user && (
+                                    <option value={user.primaryEmailAddress?.emailAddress}>
+                                        {user.primaryEmailAddress?.emailAddress} (You)
+                                    </option>
+                                )
+                            )}
                         </select>
                     </div>
 
                     {/* Team Members */}
                     <div>
                         <label className="block text-sm mb-1">Team Members</label>
-                        <select className="w-full px-3 py-2 rounded dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 mt-1 text-zinc-900 dark:text-zinc-200 text-sm"
-                            onChange={(e) => {
-                                if (e.target.value && !formData.team_members.includes(e.target.value)) {
-                                    setFormData((prev) => ({ ...prev, team_members: [...prev.team_members, e.target.value] }));
-                                }
-                            }}
-                        >
-                            <option value="">Add team members</option>
-                            {currentWorkspace?.members
-                                ?.filter((email) => !formData.team_members.includes(email))
-                                .map((member) => (
-                                    <option key={member.user.email} value={member.email}>
-                                        {member.user.email}
-                                    </option>
-                                ))}
-                        </select>
+                        {!currentWorkspace?.members || currentWorkspace.members.length === 0 ? (
+                            <div className="text-sm text-amber-600 dark:text-amber-400 mb-2">
+                                No members added yet. Team members can be added after the workspace is set up.
+                            </div>
+                        ) : (
+                            <select className="w-full px-3 py-2 rounded dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 mt-1 text-zinc-900 dark:text-zinc-200 text-sm"
+                                onChange={(e) => {
+                                    if (e.target.value && !formData.team_members.includes(e.target.value)) {
+                                        setFormData((prev) => ({ ...prev, team_members: [...prev.team_members, e.target.value] }));
+                                    }
+                                    e.target.value = ""; // Reset select
+                                }}
+                            >
+                                <option value="">Add team members</option>
+                                {currentWorkspace?.members
+                                    ?.filter((member) => !formData.team_members.includes(member.user.email))
+                                    .map((member) => (
+                                        <option key={member.user.email} value={member.user.email}>
+                                            {member.user.email}
+                                        </option>
+                                    ))}
+                            </select>
+                        )}
 
                         {formData.team_members.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-2">
@@ -145,7 +212,7 @@ const CreateProjectDialog = ({ isDialogOpen, setIsDialogOpen }) => {
                         <button type="button" onClick={() => setIsDialogOpen(false)} className="px-4 py-2 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800" >
                             Cancel
                         </button>
-                        <button disabled={isSubmitting || !currentWorkspace} className="px-4 py-2 rounded bg-gradient-to-br from-blue-500 to-blue-600 text-white dark:text-zinc-200" >
+                        <button type="submit" disabled={isSubmitting || !currentWorkspace} className="px-4 py-2 rounded bg-gradient-to-br from-blue-500 to-blue-600 text-white dark:text-zinc-200" >
                             {isSubmitting ? "Creating..." : "Create Project"}
                         </button>
                     </div>

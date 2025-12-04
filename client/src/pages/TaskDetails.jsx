@@ -1,10 +1,12 @@
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { useSelector } from "react-redux";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarIcon, MessageCircle, PenIcon } from "lucide-react";
 import { assets } from "../assets/assets";
+import { useAuth, useUser } from "@clerk/clerk-react";
+import api from "../configs/api";
 
 const TaskDetails = () => {
 
@@ -12,7 +14,8 @@ const TaskDetails = () => {
     const projectId = searchParams.get("projectId");
     const taskId = searchParams.get("taskId");
 
-    const user = { id : 'user_1'}
+    const { user } = useUser()
+    const { getToken } = useAuth()
     const [task, setTask] = useState(null);
     const [project, setProject] = useState(null);
     const [comments, setComments] = useState([]);
@@ -22,18 +25,34 @@ const TaskDetails = () => {
     const { currentWorkspace } = useSelector((state) => state.workspace);
 
     const fetchComments = async () => {
-
+        if (taskId) return
+        try {
+            const token = await getToken()
+            const { data } = await api.get(`/api/comments/${taskId}`, { headers: { Authorization: `Bearer ${token}` } })
+            setComments(data.comments || [])
+        } catch (error) {
+            toast.error(error?.response?.data?.message || error.message)
+        }
     };
 
     const fetchTaskDetails = async () => {
         setLoading(true);
-        if (!projectId || !taskId) return;
+        if (!projectId || !taskId || !currentWorkspace) {
+            setLoading(false);
+            return;
+        }
 
-        const proj = currentWorkspace.projects.find((p) => p.id === projectId);
-        if (!proj) return;
+        const proj = currentWorkspace.projects?.find((p) => p.id === projectId);
+        if (!proj) {
+            setLoading(false);
+            return;
+        }
 
-        const tsk = proj.tasks.find((t) => t.id === taskId);
-        if (!tsk) return;
+        const tsk = proj.tasks?.find((t) => t.id === taskId);
+        if (!tsk) {
+            setLoading(false);
+            return;
+        }
 
         setTask(tsk);
         setProject(proj);
@@ -47,12 +66,10 @@ const TaskDetails = () => {
 
             toast.loading("Adding comment...");
 
-            //  Simulate API call
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const token = await getToken();
+            const { data } = await api.post(`/api/comments`, { taskId: task.id, content: newComment }, { headers: { Authorization: `Bearer ${token}` } })
 
-            const dummyComment = { id: Date.now(), user: { id: 1, name: "User", image: assets.profile_img_a }, content: newComment, createdAt: new Date() };
-            
-            setComments((prev) => [...prev, dummyComment]);
+            setComments((prev) => [...prev, data.comment]);
             setNewComment("");
             toast.dismissAll();
             toast.success("Comment added.");
@@ -63,15 +80,9 @@ const TaskDetails = () => {
         }
     };
 
-    useEffect(() => { fetchTaskDetails(); }, [taskId]);
-
     useEffect(() => {
-        if (taskId && task) {
-            fetchComments();
-            const interval = setInterval(() => { fetchComments(); }, 10000);
-            return () => clearInterval(interval);
-        }
-    }, [taskId, task]);
+        fetchTaskDetails();
+    }, [taskId, projectId, currentWorkspace?.id]);
 
     if (loading) return <div className="text-gray-500 dark:text-zinc-400 px-4 py-6">Loading task details...</div>;
     if (!task) return <div className="text-red-500 px-4 py-6">Task not found.</div>;

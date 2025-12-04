@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeftIcon, PlusIcon, SettingsIcon, BarChart3Icon, CalendarIcon, FileStackIcon, ZapIcon } from "lucide-react";
@@ -15,24 +15,30 @@ export default function ProjectDetail() {
     const id = searchParams.get('id');
 
     const navigate = useNavigate();
-    const projects = useSelector((state) => state?.workspace?.currentWorkspace?.projects || []);
-
+    const currentWorkspace = useSelector((state) => state?.workspace?.currentWorkspace);
+    
     const [project, setProject] = useState(null);
     const [tasks, setTasks] = useState([]);
     const [showCreateTask, setShowCreateTask] = useState(false);
     const [activeTab, setActiveTab] = useState(tab || "tasks");
 
+    // Use useMemo to prevent unnecessary recalculations
+    const projects = useMemo(() => currentWorkspace?.projects || [], [currentWorkspace?.id]);
+
     useEffect(() => {
         if (tab) setActiveTab(tab);
     }, [tab]);
 
+    // Find and set project only when id or projects length changes, not the array reference
     useEffect(() => {
-        if (projects && projects.length > 0) {
+        if (projects.length > 0 && id) {
             const proj = projects.find((p) => p.id === id);
-            setProject(proj);
-            setTasks(proj?.tasks || []);
+            if (proj) {
+                setProject(proj);
+                setTasks(proj?.tasks || []);
+            }
         }
-    }, [id, projects]);
+    }, [id, projects.length]);
 
     const statusColors = {
         PLANNING: "bg-zinc-200 text-zinc-900 dark:bg-zinc-600 dark:text-zinc-200",

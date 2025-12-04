@@ -5,9 +5,23 @@ import prisma from "../configs/prisma.js";
 export const getUserWorkspaces = async (req, res) => {
     try {
         const { userId } = await req.auth();
+        console.log("Fetching workspaces for userId:", userId);
+        
+        // First, check if user exists
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        console.log("User found:", user?.email);
+        
+        // Check all workspaces in database
+        const allWorkspaces = await prisma.workspace.findMany();
+        console.log("Total workspaces in DB:", allWorkspaces.length);
+        
+        // Get workspaces where user is a member OR owner
         const workspaces = await prisma.workspace.findMany({
             where: {
-                members: { some: { userId: userId } }
+                OR: [
+                    { members: { some: { userId: userId } } },
+                    { ownerId: userId }
+                ]
             },
             include: {
                 members: { include: { user: true } },
@@ -20,10 +34,22 @@ export const getUserWorkspaces = async (req, res) => {
                 owner: true
             }
         });
+        
+        console.log("Found workspaces for this user:", workspaces.length);
+        if (workspaces.length > 0) {
+            console.log("First workspace:", workspaces[0].name, "Owner:", workspaces[0].owner?.email, "Members:", workspaces[0].members.length);
+        } else {
+            console.log("User has no workspaces. Checking if any workspace has this user as owner...");
+            const ownedWorkspaces = await prisma.workspace.findMany({
+                where: { ownerId: userId }
+            });
+            console.log("Workspaces owned by this user:", ownedWorkspaces.length);
+        }
+        
         res.json({ workspaces })
 
     } catch (error) {
-        console.log(error);
+        console.log("Error in getUserWorkspaces:", error);
         res.status(500).json({ message: error.code || error.message })
     }
 }

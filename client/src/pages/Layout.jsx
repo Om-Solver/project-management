@@ -10,6 +10,7 @@ import { fetchWorkspaces } from '../features/workspaceSlice'
 
 const Layout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+    const [hasInitialized, setHasInitialized] = useState(false)
     const { loading, workspaces } = useSelector((state) => state.workspace)
     const dispatch = useDispatch()
     const { user, isLoaded } = useUser()
@@ -20,23 +21,24 @@ const Layout = () => {
     // Initial load of theme
     useEffect(() => {
         dispatch(loadTheme())
-    }, [])
+    }, [dispatch])
 
-    // Initial load of workspaces
+    // Initial load of workspaces - only once
     useEffect(() => {
-        if (isLoaded && user) {
+        if (isLoaded && user && !hasInitialized) {
+            setHasInitialized(true)
             dispatch(fetchWorkspaces({ getToken }))
         }
-    }, [dispatch, getToken, isLoaded, user])
+    }, [isLoaded, user, hasInitialized, dispatch, getToken])
 
+    // Set organization if needed
     useEffect(() => {
-        if (!orgListLoaded) return
-        if (organization) return
-        const first = userMemberships?.data?.[0]?.organization
-        if (first) {
-            setActive({ organization: first.id }).catch(() => {})
+        if (!orgListLoaded || organization) return
+        const firstOrg = userMemberships?.data?.[0]?.organization
+        if (firstOrg) {
+            setActive({ organization: firstOrg.id }).catch(() => {})
         }
-    }, [orgListLoaded, organization, userMemberships, setActive])
+    }, [orgListLoaded, organization, userMemberships?.data, setActive])
 
     if (!user) {
         return (
